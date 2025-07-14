@@ -49,14 +49,15 @@ impl<'a> HyprlandWorkSpaceWidget {
 impl StatefulWidget for HyprlandWorkSpaceWidget {
     type State = HyprlandState;
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut HyprlandState) {
-        let highlight_style = (Color::default(), tailwind::BLUE.c700);
+        let highlight_style = (Color::Black, Color::Blue);
         Tabs::new(
             state
                 .workspaces
                 .iter()
-                .map(|workspace| workspace.1.clone())
+                .map(|workspace| format!(" {} ", workspace.1))
                 .collect::<Vec<String>>(),
         )
+        .padding(" ", " ")
         .highlight_style(highlight_style)
         .select(state.activeworkspaceindex)
         .render(area, buf);

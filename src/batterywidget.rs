@@ -28,7 +28,7 @@ impl BatteryState {
 
     pub fn tick(&mut self) {
         self.ticks += 1;
-        if self.ticks == 50 {
+        if self.ticks == 100 {
             self.update();
             self.ticks = 0;
         }
