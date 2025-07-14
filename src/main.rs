@@ -1,5 +1,3 @@
-use ratatui::{backend::CrosstermBackend, Terminal};
-
 use crate::{
     app::{App, AppResult},
 };

@@ -1,11 +1,10 @@
 use ratatui::{
     buffer::Buffer,
-    layout::{Alignment, Constraint, Layout, Margin, Rect},
-    style::{Color, Stylize, palette::tailwind},
-    widgets::{Block, Clear, List, ListState, Padding, Paragraph, StatefulWidget, Tabs, Widget},
+    layout::{Alignment, Rect},
+    widgets::{Block, Padding, Paragraph, StatefulWidget, Widget},
 };
 
-use battery::{Batteries, Battery, Manager, State as BatteryChargingState};
+use battery::{Manager, State as BatteryChargingState};
 
 #[derive(Debug, Clone)]
 pub struct BatteryState {

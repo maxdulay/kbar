@@ -1,12 +1,8 @@
 use std::io;
 use std::error;
-use std::error::Error;
-use std::sync::Arc;
 use hyprland::event_listener::Event as HyprlandEvent;
-use hyprland::event_listener::WindowEventData;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use tokio::sync::Semaphore;
 
 
 use ratatui::{backend::CrosstermBackend, Terminal};

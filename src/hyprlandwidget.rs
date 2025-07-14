@@ -1,12 +1,11 @@
 use ratatui::{
     buffer::Buffer,
-    layout::{Constraint, Layout, Margin, Rect},
-    style::{Color, Stylize, palette::tailwind},
-    widgets::{Block, Clear, List, ListState, Paragraph, StatefulWidget, Tabs, Widget},
+    layout::Rect,
+    style::Color ,
+    widgets::{StatefulWidget, Tabs, Widget},
 };
 
-use hyprland::data::{Monitors, Workspaces, Clients};
-use hyprland::shared::{HyprData, HyprDataActive, HyprDataActiveOptional};
+use hyprland::{data::{Clients, Workspaces}, shared::HyprData};
 
 
 #[derive(Debug, Clone)]

@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use crossterm::event::{Event as CrosstermEvent, KeyEvent, MouseEvent};
+use crossterm::event::{MouseEvent};
 use futures::{FutureExt, StreamExt};
 use tokio::sync::mpsc;
 
-use hyprland::event_listener::{Event as HyprlandEvent, WindowEventData, WorkspaceEventData};
+use hyprland::event_listener::{Event as HyprlandEvent};
 
 use crate::app::AppResult;
 
