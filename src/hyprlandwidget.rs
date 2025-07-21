@@ -1,12 +1,14 @@
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::Color ,
+    style::Color,
     widgets::{StatefulWidget, Tabs, Widget},
 };
 
-use hyprland::{data::{Clients, Workspaces}, shared::HyprData};
-
+use hyprland::{
+    data::{Clients, Workspaces},
+    shared::HyprData,
+};
 
 #[derive(Debug, Clone)]
 pub struct HyprlandState {
@@ -32,8 +34,8 @@ impl HyprlandState {
             activeworkspaceindex: 0,
             activewindow: match activewindow {
                 Some(client) => client.title.to_string(),
-                None => "".to_string()
-            }
+                None => "".to_string(),
+            },
         }
     }
 }
@@ -50,6 +52,7 @@ impl StatefulWidget for HyprlandWorkSpaceWidget {
     type State = HyprlandState;
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut HyprlandState) {
         let highlight_style = (Color::Black, Color::Blue);
+        let workspace_num = state.workspaces.len()-1;
         Tabs::new(
             state
                 .workspaces
@@ -59,7 +62,11 @@ impl StatefulWidget for HyprlandWorkSpaceWidget {
         )
         .padding(" ", " ")
         .highlight_style(highlight_style)
-        .select(state.activeworkspaceindex)
+        .select(if state.activeworkspaceindex > workspace_num {
+            workspace_num
+        } else {
+            state.activeworkspaceindex
+        })
         .render(area, buf);
     }
 }
