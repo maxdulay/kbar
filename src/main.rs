@@ -10,6 +10,8 @@ pub mod hyprlandwidget;
 pub mod batterywidget;
 pub mod pipemon;
 pub mod pipewirewidget;
+pub mod network;
+pub mod networkwidget;
 
 #[tokio::main]
 async fn main() -> AppResult<()> {

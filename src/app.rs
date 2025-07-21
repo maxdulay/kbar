@@ -1,16 +1,20 @@
-use std::io;
-use std::error;
 use hyprland::event_listener::Event as HyprlandEvent;
+use std::error;
+use std::io;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
+use ratatui::{Terminal, backend::CrosstermBackend};
 
-use ratatui::{backend::CrosstermBackend, Terminal};
-
-use crate::tui::Tui;
-use crate::event::{EventHandler, Event};
-use crate::hyprlandwidget::HyprlandState;
 use crate::batterywidget::BatteryState;
+use crate::event::{Event, EventHandler};
+use crate::hyprlandwidget::HyprlandState;
+use crate::pipemon::PipeWireEvent;
+use crate::pipewirewidget::PipewireState;
+use crate::networkwidget::NetworkState;
+use crate::tui::Tui;
+
+use crate::network::nl80211_stream::Event as NetEvent;
 
 pub type AppResult<T> = std::result::Result<T, Box<dyn error::Error>>;
 
@@ -18,8 +22,10 @@ pub type AppResult<T> = std::result::Result<T, Box<dyn error::Error>>;
 pub enum Action {
     Render,
     UpdateHyprlandState(HyprlandEvent),
+    UpdatePipeWireState(PipeWireEvent),
+    UpdateNetworkState(NetEvent),
     Tick,
-    None
+    None,
 }
 
 pub struct App {
@@ -27,9 +33,9 @@ pub struct App {
     pub hyprland_state: HyprlandState,
     pub battery_state: BatteryState,
     pub pipwire_state: PipewireState,
+    pub network_state: NetworkState,
     action_tx: UnboundedSender<Action>,
     action_rx: UnboundedReceiver<Action>,
-
 }
 
 impl App {
@@ -40,25 +46,29 @@ impl App {
             hyprland_state: HyprlandState::new(),
             battery_state: BatteryState::new(),
             pipwire_state: PipewireState::new(),
+            network_state: NetworkState::new(),
             action_tx: action_tx.clone(),
-            action_rx
+            action_rx,
         }
     }
 
     pub async fn run(&mut self) -> AppResult<()> {
         let backend = CrosstermBackend::new(io::stdout());
         let terminal = Terminal::new(backend).expect("Failed to create backend");
-        let events = EventHandler::new(50);
+        let events = EventHandler::new(100);
         let mut tui = Tui::new(terminal, events);
         tui.init().expect("Failed to inialize");
         while self.running {
             match tui.events.next().await? {
-                Event::Tick => self.action_tx.send(Action::None)?,
                 Event::Tick => self.action_tx.send(Action::Tick)?,
                 Event::Render => self.action_tx.send(Action::Render)?,
                 Event::Mouse(_) => self.action_tx.send(Action::None)?,
                 Event::Resize(_, _) => self.action_tx.send(Action::None)?,
-                Event::UpdateHyprlandState(event) => self.action_tx.send(Action::UpdateHyprlandState(event))?,
+                Event::UpdateHyprlandState(event) => {
+                    self.action_tx.send(Action::UpdateHyprlandState(event))?
+                }
+                Event::UpdatePipeWireState(event) => self.action_tx.send(Action::UpdatePipeWireState(event))?,
+                Event::UpdateNetworkState(event) => self.action_tx.send(Action::UpdateNetworkState(event))?
             }
 
             while let Ok(action) = self.action_rx.try_recv() {
@@ -73,39 +83,68 @@ impl App {
 
     async fn update(&mut self, action: Action) {
         match action {
-            Action::UpdateHyprlandState(hyprland_event) => {
-                match hyprland_event {
-                    HyprlandEvent::WorkspaceChanged(workspace_event_data) => {
+            Action::UpdateHyprlandState(hyprland_event) => match hyprland_event {
+                HyprlandEvent::WorkspaceChanged(workspace_event_data) => {
+                    let mut i = 0;
+                    for workspace in self.hyprland_state.workspaces.clone() {
+                        if workspace_event_data.id == workspace.0 {
+                            self.hyprland_state.activeworkspaceindex = i;
+                            break;
+                        }
+                        i += 1;
+                    }
+                }
+                HyprlandEvent::WorkspaceDeleted(workspace_event_data) => {
+                    match self
+                        .hyprland_state
+                        .workspaces
+                        .binary_search_by_key(&workspace_event_data.id, |&(a, _)| a)
+                    {
+                        Ok(pos) => {
+                            self.hyprland_state.workspaces.remove(pos);
+                        }
+                        Err(_pos) => {}
+                    }
+                }
+                HyprlandEvent::WorkspaceAdded(workspace_event_data) => {
+                    match self
+                        .hyprland_state
+                        .workspaces
+                        .binary_search_by_key(&workspace_event_data.id, |&(a, _)| a)
+                    {
+                        Ok(_pos) => {}
+                        Err(pos) => {
+                            self.hyprland_state.workspaces.insert(
+                                pos,
+                                (
+                                    workspace_event_data.id,
+                                    workspace_event_data.name.to_string(),
+                                ),
+                            );
+                        }
+                    }
+                }
+                HyprlandEvent::ActiveWindowChanged(window_event_data) => {
+                    self.hyprland_state.activewindow = match window_event_data {
+                        Some(window_event) => window_event.title,
+                        None => "".to_string(),
+                    }
+                }
+                HyprlandEvent::ActiveMonitorChanged(monitor_event_data) => {
+                    if let Some(workspace_type) = monitor_event_data.workspace_name {
                         let mut i = 0;
+                        let name = workspace_type.to_string();
                         for workspace in self.hyprland_state.workspaces.clone() {
-                            if workspace_event_data.id == workspace.0 {
+                            if name == workspace.1 {
                                 self.hyprland_state.activeworkspaceindex = i;
                                 break;
                             }
                             i += 1;
                         }
-                    },
-                    HyprlandEvent::WorkspaceDeleted(workspace_event_data) => {
-                        match self.hyprland_state.workspaces.binary_search_by_key(&workspace_event_data.id, |&(a,_)| a) {
-                            Ok(pos) => {self.hyprland_state.workspaces.remove(pos);},
-                            Err(_pos) => {}
-                        } 
-                    },
-                    HyprlandEvent::WorkspaceAdded(workspace_event_data) => {
-                        match self.hyprland_state.workspaces.binary_search_by_key(&workspace_event_data.id, |&(a,_)| a) {
-                            Ok(_pos) => {}
-                            Err(pos) => {self.hyprland_state.workspaces.insert(pos, (workspace_event_data.id, workspace_event_data.name.to_string()));}
-                        } 
-                    },
-                    HyprlandEvent::ActiveWindowChanged(window_event_data) => {
-                        self.hyprland_state.activewindow = match window_event_data {
-                            Some(window_event) => window_event.title,
-                            None => "".to_string(),
-                        }
                     }
-                    _ =>  {},
                 }
-            }
+                _ => {}
+            },
             Action::UpdatePipeWireState(pipewire_event) => match pipewire_event {
                 PipeWireEvent::UpdateVolumes(id, items) => {
                     self.pipwire_state.update_volumes(id, items)

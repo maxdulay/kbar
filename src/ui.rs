@@ -8,7 +8,7 @@ use ratatui::{
 
 };
 
-use crate::app::App;
+use crate::{app::App, networkwidget::NetworkWidget};
 use crate::hyprlandwidget::{HyprlandWorkSpaceWidget};
 use crate::batterywidget::BatteryWidget;
 use crate::pipewirewidget::PipewireWidget;
@@ -31,8 +31,14 @@ pub fn render(app: &mut App, frame: &mut Frame) {
     let workspaces = HyprlandWorkSpaceWidget::new();
     let mut hyprstate = app.hyprland_state.clone();
     frame.render_stateful_widget(workspaces, left[1], &mut hyprstate);
+
     let activewindow = Paragraph::new(app.hyprland_state.activewindow.clone()).centered();
     frame.render_widget(activewindow, layout[1]);
+
+    let mut networkstate = app.network_state.clone();
+    let mut network = NetworkWidget::new();
+    network.right_aligned();
+    frame.render_stateful_widget(network, right[0], &mut networkstate);
     let mut pwstate = app.pipwire_state.clone();
     let mut pipewire = PipewireWidget::new();
     pipewire.right_aligned();
