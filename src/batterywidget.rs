@@ -9,7 +9,7 @@ use battery::{Manager, State as BatteryChargingState};
 #[derive(Debug, Clone)]
 pub struct BatteryState {
     ticks: u8,
-    pub charge: u8,
+    pub charge: usize,
     pub state: BatteryChargingState,
 }
 
@@ -21,26 +21,24 @@ impl BatteryState {
         };
         Self {
             ticks: 0,
-            charge: (battery.state_of_charge().value * 100.0) as u8,
+            charge: (battery.state_of_charge().value * 100.0) as usize,
             state: battery.state(),
         }
     }
 
     pub fn tick(&mut self) {
         self.ticks += 1;
-        if self.ticks == 100 {
+        if self.ticks >= 100 {
             self.update();
             self.ticks = 0;
         }
     }
 
     pub fn update(&mut self) {
-        let battery = match Manager::new().unwrap().batteries().unwrap().next() {
-            Some(battery) => battery.unwrap(),
-            None => todo!(),
+        if let Ok(battery) = Manager::new().unwrap().batteries().unwrap().next().unwrap() {
+            self.charge = (battery.state_of_charge().value * 100.0) as usize;
+            self.state = battery.state();
         };
-        self.charge = (battery.state_of_charge().value * 100.0) as u8;
-        self.state = battery.state();
     }
 }
 
@@ -65,14 +63,16 @@ impl StatefulWidget for BatteryWidget {
         let icon = match state.state {
             BatteryChargingState::Unknown => " ",
             BatteryChargingState::Charging => {
-                ["󰢟", "󰢜", "󰂆", "󰂇", "󰂈", "󰢝", "󰂉", "󰢞", "󰂊", "󰂋"][(state.charge as usize) / 10]
+                ["󰢟", "󰢜", "󰂆", "󰂇", "󰂈", "󰢝", "󰂉", "󰢞", "󰂊", "󰂋", "󰁹"]
+                    [(state.charge) / 10]
             }
             BatteryChargingState::Discharging => {
-                ["󰂎", "󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂"][(state.charge as usize) / 10]
+                ["󰂎", "󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"]
+                    [(state.charge) / 10]
             }
             BatteryChargingState::Empty => "󰂎",
             BatteryChargingState::Full => "󰁹",
-            _ => todo!(),
+            _ => " "
         };
         Paragraph::new(format!("{} {}%", icon, state.charge))
             .alignment(self.alignment)
