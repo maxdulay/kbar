@@ -8,6 +8,8 @@ pub mod ui;
 pub mod event;
 pub mod hyprlandwidget;
 pub mod batterywidget;
+pub mod pipemon;
+pub mod pipewirewidget;
 
 #[tokio::main]
 async fn main() -> AppResult<()> {

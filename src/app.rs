@@ -26,6 +26,7 @@ pub struct App {
     pub running: bool,
     pub hyprland_state: HyprlandState,
     pub battery_state: BatteryState,
+    pub pipwire_state: PipewireState,
     action_tx: UnboundedSender<Action>,
     action_rx: UnboundedReceiver<Action>,
 
@@ -38,6 +39,7 @@ impl App {
             running: true,
             hyprland_state: HyprlandState::new(),
             battery_state: BatteryState::new(),
+            pipwire_state: PipewireState::new(),
             action_tx: action_tx.clone(),
             action_rx
         }
@@ -52,6 +54,7 @@ impl App {
         while self.running {
             match tui.events.next().await? {
                 Event::Tick => self.action_tx.send(Action::None)?,
+                Event::Tick => self.action_tx.send(Action::Tick)?,
                 Event::Render => self.action_tx.send(Action::Render)?,
                 Event::Mouse(_) => self.action_tx.send(Action::None)?,
                 Event::Resize(_, _) => self.action_tx.send(Action::None)?,
@@ -103,8 +106,33 @@ impl App {
                     _ =>  {},
                 }
             }
+            Action::UpdatePipeWireState(pipewire_event) => match pipewire_event {
+                PipeWireEvent::UpdateVolumes(id, items) => {
+                    self.pipwire_state.update_volumes(id, items)
+                }
+                PipeWireEvent::UpdateMuted(id, muted) => self.pipwire_state.update_muted(id, muted),
+                PipeWireEvent::SetDefaultSinkName(name) => {
+                    self.pipwire_state.default_sink_name = name;
+                }
+                PipeWireEvent::UpdateNodeId(id, name) => {
+                    self.pipwire_state.set_default_sink_id(name, id)
+                }
+            },
+
+            Action::UpdateNetworkState(network_event) => match network_event {
+                NetEvent::Connect(_, ifindex) => {
+                    if let Some(ifindex) = ifindex {
+                        self.network_state.connected(ifindex);
+                    }
+                },
+                NetEvent::Disconnect => {
+                    self.network_state.disconnected();
+                },
+                _ => ()
+            },
             Action::Tick => {
                 self.battery_state.tick();
+                self.network_state.tick();
             }
             _ => {}
         }
