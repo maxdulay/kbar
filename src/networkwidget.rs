@@ -216,7 +216,7 @@ impl StatefulWidget for NetworkWidget {
             Connection::Connected => ["󰤯", "󰤟", "󰤢", "󰤥", "󰤨"][((state.signal)/25).clamp(0, 4)],
             Connection::Disconnected => "󰤮",
         };
-        Paragraph::new(format!("{} {}% {}", icon, state.signal, state.ssid))
+        Paragraph::new(format!("{} {}% {} ", icon, state.signal, state.ssid))
             .alignment(self.alignment)
             .render(area, buf);
     }

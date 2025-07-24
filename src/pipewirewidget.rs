@@ -55,6 +55,10 @@ impl<'a> PipewireWidget {
     pub fn right_aligned(&mut self) {
         self.alignment = Alignment::Right;
     }
+
+    pub fn center_aligned(&mut self) {
+        self.alignment = Alignment::Center;
+    }
 }
 
 impl StatefulWidget for PipewireWidget {

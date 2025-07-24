@@ -55,6 +55,9 @@ impl<'a> BatteryWidget {
     pub fn right_aligned(&mut self) {
         self.alignment = Alignment::Right;
     }
+    pub fn center_aligned(&mut self) {
+        self.alignment = Alignment::Center;
+    }
 }
 
 impl StatefulWidget for BatteryWidget {
@@ -76,12 +79,6 @@ impl StatefulWidget for BatteryWidget {
         };
         Paragraph::new(format!("{} {}%", icon, state.charge))
             .alignment(self.alignment)
-            .block(Block::new().padding(Padding {
-                left: 2,
-                right: 2,
-                top: 0,
-                bottom: 0,
-            }))
             .render(area, buf)
     }
 }
