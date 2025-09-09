@@ -1,44 +1,63 @@
+use std::fs::File;
+use std::io;
+use std::io::prelude::Read;
+
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
     widgets::{Block, Padding, Paragraph, StatefulWidget, Widget},
 };
 
-use battery::{Manager, State as BatteryChargingState};
+#[derive(Debug, Clone)]
+enum BatteryChargingState {
+    Charging,
+    Discharging,
+}
+
 
 #[derive(Debug, Clone)]
 pub struct BatteryState {
     ticks: u8,
-    pub charge: usize,
+    pub capacity: usize,
     pub state: BatteryChargingState,
 }
 
 impl BatteryState {
     pub fn new() -> Self {
-        let battery = match Manager::new().unwrap().batteries().unwrap().next() {
-            Some(battery) => battery.unwrap(),
-            None => todo!(),
+        let mut new_battery_state = Self {ticks:0, capacity:0, state:BatteryChargingState::Discharging };
+        new_battery_state.update();
+        new_battery_state
+    }
+
+    fn update(&mut self) {
+        let mut charger = File::open("/sys/class/power_supply/ADP1/online").unwrap();
+        let mut battery = File::open("/sys/class/power_supply/BAT0/capacity").unwrap();
+
+        let mut buffer = [0; 3];
+
+        let _ = charger.read(&mut buffer);
+        self.state = if buffer[0] == ('1' as u8) {
+            BatteryChargingState::Charging
+        } else {
+            BatteryChargingState::Discharging
         };
-        Self {
-            ticks: 0,
-            charge: (battery.state_of_charge().value * 100.0) as usize,
-            state: battery.state(),
-        }
+        let _ = battery.read(&mut buffer);
+        self.capacity = if buffer[2] == ('0' as u8) {
+            100
+        } else if buffer[1] == 0 {
+            buffer[0] - ('0' as u8)
+        } else {
+            (buffer[0] - ('0' as u8)) * 10 + (buffer[1] - '0' as u8)
+        } as usize;
     }
 
     pub fn tick(&mut self) {
-        self.ticks += 1;
+        self.ticks+=1 ;
+
         if self.ticks >= 100 {
             self.update();
             self.ticks = 0;
         }
-    }
-
-    pub fn update(&mut self) {
-        if let Ok(battery) = Manager::new().unwrap().batteries().unwrap().next().unwrap() {
-            self.charge = (battery.state_of_charge().value * 100.0) as usize;
-            self.state = battery.state();
-        };
     }
 }
 
@@ -64,20 +83,14 @@ impl StatefulWidget for BatteryWidget {
     type State = BatteryState;
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut BatteryState) {
         let icon = match state.state {
-            BatteryChargingState::Unknown => " ",
             BatteryChargingState::Charging => {
-                ["󰢟", "󰢜", "󰂆", "󰂇", "󰂈", "󰢝", "󰂉", "󰢞", "󰂊", "󰂋", "󰁹"]
-                    [(state.charge) / 10]
+                ["󰢟", "󰢜", "󰂆", "󰂇", "󰂈", "󰢝", "󰂉", "󰢞", "󰂊", "󰂋", "󰁹"][(state.capacity) / 10]
             }
             BatteryChargingState::Discharging => {
-                ["󰂎", "󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"]
-                    [(state.charge) / 10]
+                ["󰂎", "󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"][(state.capacity) / 10]
             }
-            BatteryChargingState::Empty => "󰂎",
-            BatteryChargingState::Full => "󰁹",
-            _ => " "
         };
-        Paragraph::new(format!("{} {}%", icon, state.charge))
+        Paragraph::new(format!("{} {}%", icon, state.capacity))
             .alignment(self.alignment)
             .render(area, buf)
     }

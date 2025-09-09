@@ -9,9 +9,9 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 use crate::batterywidget::BatteryState;
 use crate::event::{Event, EventHandler};
 use crate::hyprlandwidget::HyprlandState;
+use crate::networkwidget::NetworkState;
 use crate::pipemon::PipeWireEvent;
 use crate::pipewirewidget::PipewireState;
-use crate::networkwidget::NetworkState;
 use crate::tui::Tui;
 
 use crate::network::nl80211_stream::Event as NetEvent;
@@ -67,8 +67,12 @@ impl App {
                 Event::UpdateHyprlandState(event) => {
                     self.action_tx.send(Action::UpdateHyprlandState(event))?
                 }
-                Event::UpdatePipeWireState(event) => self.action_tx.send(Action::UpdatePipeWireState(event))?,
-                Event::UpdateNetworkState(event) => self.action_tx.send(Action::UpdateNetworkState(event))?
+                Event::UpdatePipeWireState(event) => {
+                    self.action_tx.send(Action::UpdatePipeWireState(event))?
+                }
+                Event::UpdateNetworkState(event) => {
+                    self.action_tx.send(Action::UpdateNetworkState(event))?
+                }
             }
 
             while let Ok(action) = self.action_rx.try_recv() {
@@ -163,11 +167,11 @@ impl App {
                     if let Some(ifindex) = ifindex {
                         self.network_state.connected(ifindex);
                     }
-                },
+                }
                 NetEvent::Disconnect => {
                     self.network_state.disconnected();
-                },
-                _ => ()
+                }
+                _ => (),
             },
             Action::Tick => {
                 self.battery_state.tick();
