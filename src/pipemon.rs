@@ -71,7 +71,7 @@ pub fn pw_monitor(sender: mpsc::UnboundedSender<Event>) {
                                         if id == ParamType::Props {
                                             for property in param.clone().properties {
                                                 match property.key {
-                                                    65540 => {
+                                                    65540 => { // Mute event
                                                         if let Value::Bool(mute_bool) =
                                                             property.value
                                                         {
@@ -85,7 +85,7 @@ pub fn pw_monitor(sender: mpsc::UnboundedSender<Event>) {
                                                         }
                                                     }
 
-                                                    65544 => {
+                                                    65544 => { // Volume change event
                                                         if let Value::ValueArray(
                                                             ValueArray::Float(floats),
                                                         ) = property.value
