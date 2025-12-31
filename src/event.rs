@@ -2,6 +2,8 @@ use std::time::Duration;
 
 use crossterm::event::MouseEvent;
 use futures::{FutureExt, StreamExt};
+use neli::genl::Genlmsghdr;
+use neli::router::asynchronous::{NlRouter, NlRouterReceiverHandle};
 use tokio::sync::mpsc;
 
 use hyprland::event_listener::Event as HyprlandEvent;
@@ -10,6 +12,8 @@ use crate::app::AppResult;
 use crate::network;
 use crate::pipemon::{PipeWireEvent, pw_monitor};
 use crate::network::nl80211_stream::Event as NetEvent;
+
+use std::sync::{Arc, Mutex};
 
 
 /// Terminal events.
@@ -45,7 +49,7 @@ pub struct EventHandler {
 
 impl EventHandler {
     /// Constructs a new instance of [`EventHandler`].
-    pub fn new(tick_rate: u64) -> Self {
+    pub fn new(tick_rate: u64, socket: Arc<Mutex<NlRouter>>, mut multicast: NlRouterReceiverHandle<u16, Genlmsghdr<u8, u16>>) -> Self {
         let tick_rate = Duration::from_millis(tick_rate);
         let (sender, receiver) = mpsc::unbounded_channel();
         let _sender = sender.clone();
@@ -53,7 +57,7 @@ impl EventHandler {
         let handler = tokio::spawn(async move {
             let mut tick = tokio::time::interval(tick_rate);
             let mut hypr_reader = hyprland::event_listener::EventStream::new();
-            let mut net_reader = network::eventstream::EventStream::new();
+            let mut net_reader = network::eventstream::EventStream::new(socket, multicast);
             loop {
                 let tick_delay = tick.tick();
                 let hyprland_event = hypr_reader.next().fuse();

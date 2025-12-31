@@ -14,6 +14,8 @@ use crate::pipemon::PipeWireEvent;
 use crate::pipewirewidget::PipewireState;
 use crate::tui::Tui;
 
+use std::sync::Arc;
+
 use crate::network::nl80211_stream::Event as NetEvent;
 
 pub type AppResult<T> = std::result::Result<T, Box<dyn error::Error>>;
@@ -39,14 +41,14 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
-        let (action_tx, mut action_rx) = mpsc::unbounded_channel::<Action>();
+    pub async fn new() -> Self {
+        let (action_tx, action_rx) = mpsc::unbounded_channel::<Action>();
         Self {
             running: true,
             hyprland_state: HyprlandState::new(),
             battery_state: BatteryState::new(),
             pipwire_state: PipewireState::new(),
-            network_state: NetworkState::new(),
+            network_state: NetworkState::new().await,
             action_tx: action_tx.clone(),
             action_rx,
         }
@@ -55,7 +57,11 @@ impl App {
     pub async fn run(&mut self) -> AppResult<()> {
         let backend = CrosstermBackend::new(io::stdout());
         let terminal = Terminal::new(backend).expect("Failed to create backend");
-        let events = EventHandler::new(100);
+        let multicast = match Arc::try_unwrap(self.network_state.multicast.take().unwrap()) {
+            Ok(val) => val,
+            Err(_) => panic!("multicast still has other references"),
+        };
+        let events = EventHandler::new(100, self.network_state.socket.clone(), multicast);
         let mut tui = Tui::new(terminal, events);
         tui.init().expect("Failed to inialize");
         while self.running {
@@ -165,7 +171,7 @@ impl App {
             Action::UpdateNetworkState(network_event) => match network_event {
                 NetEvent::Connect(_, ifindex) => {
                     if let Some(ifindex) = ifindex {
-                        self.network_state.connected(ifindex);
+                        self.network_state.connected(ifindex).await;
                     }
                 }
                 NetEvent::Disconnect => {
@@ -175,7 +181,7 @@ impl App {
             },
             Action::Tick => {
                 self.battery_state.tick();
-                self.network_state.tick();
+                self.network_state.tick().await;
             }
             _ => {}
         }

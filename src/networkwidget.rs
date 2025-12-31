@@ -2,11 +2,11 @@ use std::io::Cursor;
 
 use neli::{
     FromBytesWithInput, ToBytes,
-    attr::{Attribute},
-    consts::{ nl::*, socket::*},
+    attr::Attribute,
+    consts::{nl::*, socket::*},
     genl::{Genlmsghdr, GenlmsghdrBuilder, NlattrBuilder, NoUserHeader},
-    nl::{NlPayload},
-    router::synchronous::NlRouter,
+    nl::{NlPayload, Nlmsghdr},
+    router::asynchronous::{NlRouter, NlRouterReceiverHandle},
     types::GenlBuffer,
     utils::Groups,
 };
@@ -17,6 +17,8 @@ use ratatui::{
 };
 
 use crate::network::nl80211_stream::{Nl80211Attribute, Nl80211Command, Nl80211StaInfo};
+use std::sync::{Arc, Mutex};
+
 
 #[derive(Debug, Clone)]
 pub enum Connection {
@@ -24,8 +26,10 @@ pub enum Connection {
     Disconnected,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct NetworkState {
+    pub socket: Arc<Mutex<NlRouter>>,
+    pub multicast: Option<Arc<NlRouterReceiverHandle<u16, Genlmsghdr<u8, u16>>>>,
     ticks: u8,
     ifindex: u32,
     pub state: Connection,
@@ -34,17 +38,22 @@ pub struct NetworkState {
 }
 
 impl NetworkState {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
+        let (socket, mut multicast) = NlRouter::connect(NlFamily::Generic, None, Groups::empty()).await.unwrap();
+        let arc_socket: Arc<Mutex<NlRouter>> = Arc::new(Mutex::new(socket));
+        let ifindex = NetworkState::get_default_ifindex(arc_socket.clone()).await;
         let mut netstate = Self {
+            socket: arc_socket,
+            multicast: Some(Arc::new(multicast)),
             ticks: 0,
-            ifindex: NetworkState::get_default_ifindex(),
+            ifindex,
             ssid: "Disconnected".to_string(),
             state: Connection::Disconnected,
             signal: 0,
         };
         if netstate.ifindex != 0 {
-            netstate.set_ssid(netstate.ifindex);
-            netstate.set_wifi_quality(netstate.ifindex);
+            netstate.set_ssid(netstate.ifindex).await;
+            netstate.set_wifi_quality(netstate.ifindex).await;
         }
         netstate
     }
@@ -54,21 +63,21 @@ impl NetworkState {
         self.signal = 0;
         self.ssid = "Disconnected".to_string();
     }
-    pub fn connected(&mut self, ifindex: u32) {
+    pub async fn connected(&mut self, ifindex: u32) {
         self.state = Connection::Connected;
-        self.set_ssid(ifindex);
-        self.set_wifi_quality(ifindex);
+        self.set_ssid(ifindex).await;
+        self.set_wifi_quality(ifindex).await;
     }
-    
-    pub fn tick(&mut self) {
+
+    pub async fn tick(&mut self) {
         self.ticks += 1;
         if self.ticks >= 100 {
-            self.set_wifi_quality(self.ifindex);
+            self.set_wifi_quality(self.ifindex).await;
             self.ticks = 0;
         }
     }
 
-    fn set_ssid(&mut self, ifindex: u32) {
+    async fn set_ssid(&mut self, ifindex: u32) {
         self.ifindex = ifindex;
         let attrs = vec![
             NlattrBuilder::<Nl80211Attribute, _>::default()
@@ -80,9 +89,10 @@ impl NetworkState {
         .into_iter()
         .collect::<GenlBuffer<Nl80211Attribute, neli::types::Buffer>>();
 
-        let (s, _) = NlRouter::connect(NlFamily::Generic, None, Groups::empty()).unwrap();
-        let family_id = s.resolve_genl_family("nl80211").unwrap();
-        let recv = s
+        // let (s, _) = NlRouter::connect(NlFamily::Generic, None, Groups::empty()).unwrap();
+        let s = self.socket.lock().unwrap();
+        let family_id = s.resolve_genl_family("nl80211").await.unwrap();
+        let mut recv = s
             .send::<_, _, u16, Genlmsghdr<Nl80211Command, Nl80211Attribute>>(
                 family_id,
                 NlmF::REQUEST,
@@ -95,8 +105,10 @@ impl NetworkState {
                         .unwrap(),
                 ),
             )
+            .await
             .unwrap();
-        let msg = recv.into_iter().next().unwrap().unwrap();
+        let msg: Nlmsghdr<u16, Genlmsghdr<Nl80211Command, Nl80211Attribute>> =
+            recv.next().await.unwrap().unwrap();
         let payload = match msg.nl_payload() {
             NlPayload::Payload(p) => p,
             _ => return,
@@ -113,10 +125,10 @@ impl NetworkState {
         // TODO: Connections without SSIDS
     }
 
-    pub fn get_default_ifindex() -> u32 {
-        let (s, _) = NlRouter::connect(NlFamily::Generic, None, Groups::empty()).unwrap();
-        let family_id = s.resolve_genl_family("nl80211").unwrap();
-        let recv = s
+    pub async fn get_default_ifindex(socket: Arc<Mutex<NlRouter>>) -> u32 {
+        let s = socket.lock().unwrap();
+        let family_id = s.resolve_genl_family("nl80211").await.unwrap();
+        let mut recv = s
             .send::<_, _, u16, Genlmsghdr<Nl80211Command, Nl80211Attribute>>(
                 family_id,
                 NlmF::DUMP | NlmF::REQUEST,
@@ -128,15 +140,23 @@ impl NetworkState {
                         .unwrap(),
                 ),
             )
+            .await
             .unwrap();
-        for msg in recv {
-            let msg = msg.unwrap();
+        loop {
+            let msg: Nlmsghdr<u16, Genlmsghdr<Nl80211Command, Nl80211Attribute>> =
+                match recv.next().await {
+                    Some(msg) => msg.unwrap(),
+                    None => break,
+                };
+
             let payload = match msg.nl_payload() {
                 NlPayload::Payload(p) => p,
                 _ => return 0,
             };
+
             let attr_handle = payload.attrs().get_attr_handle();
             let mut ifindex = 0;
+
             for attr in attr_handle.iter() {
                 match attr.nla_type().nla_type() {
                     Nl80211Attribute::Ifindex => {
@@ -151,9 +171,9 @@ impl NetworkState {
                 }
             }
         }
-        return 0;
+        return 0
     }
-    pub fn set_wifi_quality(&mut self, ifindex: u32) {
+    pub async fn set_wifi_quality(&mut self, ifindex: u32) {
         let attrs = vec![
             NlattrBuilder::<Nl80211Attribute, _>::default()
                 .nla_type((u16::from(Nl80211Attribute::Ifindex)).into())
@@ -164,9 +184,9 @@ impl NetworkState {
         .into_iter()
         .collect::<GenlBuffer<Nl80211Attribute, neli::types::Buffer>>();
 
-        let (s, _) = NlRouter::connect(NlFamily::Generic, None, Groups::empty()).unwrap();
-        let family_id = s.resolve_genl_family("nl80211").unwrap();
-        let recv = s
+        let s = self.socket.lock().unwrap();
+        let family_id = s.resolve_genl_family("nl80211").await.unwrap();
+        let mut recv = s
             .send::<_, _, u16, Genlmsghdr<Nl80211Command, Nl80211Attribute>>(
                 family_id,
                 NlmF::DUMP | NlmF::REQUEST,
@@ -179,15 +199,22 @@ impl NetworkState {
                         .unwrap(),
                 ),
             )
-            .unwrap();
-        let msg = recv.into_iter().next().unwrap().unwrap();
+            .await.unwrap();
+        let msg: Nlmsghdr<u16, Genlmsghdr<Nl80211Command, Nl80211Attribute>> =
+            recv.next().await.unwrap().unwrap();
         let payload = match msg.nl_payload() {
             NlPayload::Payload(p) => p,
             _ => return,
         };
         let attr_handle = payload.attrs().get_attr_handle();
-        let station_attributes = attr_handle.get_nested_attributes::<Nl80211StaInfo>(Nl80211Attribute::StaInfo);
-        let signal = station_attributes.unwrap().get_attribute(Nl80211StaInfo::Signal).unwrap().get_payload_as::<i8>().unwrap();
+        let station_attributes =
+            attr_handle.get_nested_attributes::<Nl80211StaInfo>(Nl80211Attribute::StaInfo);
+        let signal = station_attributes
+            .unwrap()
+            .get_attribute(Nl80211StaInfo::Signal)
+            .unwrap()
+            .get_payload_as::<i8>()
+            .unwrap();
         self.signal = 2 * ((signal + 100) as usize)
     }
 }
@@ -213,7 +240,7 @@ impl StatefulWidget for NetworkWidget {
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut NetworkState) {
         let icon = match state.state {
-            Connection::Connected => ["󰤯", "󰤟", "󰤢", "󰤥", "󰤨"][((state.signal)/25).clamp(0, 4)],
+            Connection::Connected => ["󰤯", "󰤟", "󰤢", "󰤥", "󰤨"][((state.signal) / 25).clamp(0, 4)],
             Connection::Disconnected => "󰤮",
         };
         Paragraph::new(format!("{} {}% {} ", icon, state.signal, state.ssid))

@@ -15,7 +15,7 @@ pub mod networkwidget;
 
 #[tokio::main]
 async fn main() -> AppResult<()> {
-    let mut app = App::new();
-    let result = app.run().await;
+    let mut app = App::new().await;
+    let _result = app.run().await;
     Ok(())
 }
