@@ -16,10 +16,8 @@
             rustPlatform.bindgenHook
             llvmPackages.libclang.lib
           ];
-          devDeps = with pkgs; [ gdb ];
 
           cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
-          msrv = cargoToml.package.rust-version;
 
           rustPackage = features:
             (pkgs.makeRustPlatform {
@@ -33,33 +31,23 @@
               buildInputs = runtimeDeps;
               nativeBuildInputs = buildDeps;
 
-							LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+              LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
               # Uncomment if your cargo tests require networking or otherwise
               # don't play nicely with the Nix build sandbox:
               # doCheck = false;
             };
 
-          mkDevShell = rustc:
-            pkgs.mkShell {
-              shellHook = ''
-                export RUST_SRC_PATH=${pkgs.rustPlatform.rustLibSrc}
-              '';
-              buildInputs = runtimeDeps;
-              nativeBuildInputs = buildDeps ++ devDeps ++ [ rustc ];
-            };
         in {
           _module.args.pkgs = import inputs.nixpkgs {
             inherit system;
             overlays = [ (import inputs.rust-overlay) ];
           };
-
           packages.default = rustPackage "";
-          devShells.default = self'.devShells.nightly;
-
-          devShells.nightly = (mkDevShell (pkgs.rust-bin.selectLatestNightlyWith
-            (toolchain: toolchain.default)));
-          devShells.stable = (mkDevShell pkgs.rust-bin.stable.latest.default);
-          devShells.msrv = (mkDevShell pkgs.rust-bin.stable.${msrv}.default);
+          packages.kbar = rustPackage "";
+          devShells.default = pkgs.mkShell {
+            nativeBuildInputs = buildDeps ++ pkgs.rustc;
+            LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+          };
         };
     };
 }
