@@ -15,8 +15,10 @@ use neli::{
     utils::Groups,
 };
 
-use neli::consts::socket::NlFamily;
-use neli::router::asynchronous::NlRouter;
+use std::sync::{Arc, Mutex};
+use futures::executor::block_on;
+
+use neli::router::asynchronous::{NlRouter, NlRouterReceiverHandle};
 
 use nl80211_stream::*;
 
@@ -44,12 +46,10 @@ pub struct EventStream {
 
 #[must_use = "streams nothing unless polled"]
 impl EventStream {
-    pub fn new() -> Self {
+    pub fn new(socket: Arc<Mutex<NlRouter>>, mut multicast: NlRouterReceiverHandle<u16, Genlmsghdr<u8, u16>>) -> Self {
+        let id = block_on(socket.lock().unwrap().resolve_nl_mcast_group("nl80211", "mlme")).unwrap();
+        socket.lock().unwrap().add_mcast_membership(Groups::new_groups(&[id])).unwrap();
         let stream = try_stream! {
-            let (socket, mut multicast) =
-                NlRouter::connect(NlFamily::Generic, None, Groups::empty()).await?;
-            let id = socket.resolve_nl_mcast_group("nl80211", "mlme").await?;
-            socket.add_mcast_membership(Groups::new_groups(&[id]))?;
             loop {
                 if let Some(Ok(msg)) = multicast.next::<GenlId, Genlmsghdr<Nl80211Command, Nl80211Attribute>>().await {
                     if let Ok(msg) = parse_event(msg) {
