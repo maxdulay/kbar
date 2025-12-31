@@ -18,6 +18,9 @@ neli-proc-macros = "0.2.0"
 futures-lite = "2.6.0"
 async-stream = "0.3.6"
 
-
 [profile.dev]
 opt-level = 1
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
