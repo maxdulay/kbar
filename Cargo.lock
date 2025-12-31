@@ -929,9 +929,9 @@ dependencies = [
 
 [[package]]
 name = "neli"
-version = "0.7.0"
+version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9da136e72276307267d2a717385588631d80a910ac8835697e92f4e1c5befdb2"
+checksum = "e23bebbf3e157c402c4d5ee113233e5e0610cc27453b2f07eefce649c7365dcc"
 dependencies = [
  "bitflags",
  "byteorder",

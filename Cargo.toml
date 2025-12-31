@@ -13,8 +13,11 @@ error = "0.1.9"
 chrono = "0.4.41"
 pipewire = "0.8.0"
 libspa = "0.8.0"
-neli = { version = "0.7.0", features = ["tokio", "async"] }
+neli = { version = "0.7.3", features = ["tokio", "async"] }
 neli-proc-macros = "0.2.0"
 futures-lite = "2.6.0"
 async-stream = "0.3.6"
 
+
+[profile.dev]
+opt-level = 1
