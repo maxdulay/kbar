@@ -66,7 +66,7 @@ impl StatefulWidget for PipewireWidget {
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut PipewireState) {
         let icon = match state.muted {
             true => "󰝟",
-            false => ["󰕿", "󰖀", "󰕾"][state.volume as usize / 34],
+            false => ["󰕿", "󰖀", "󰕾"][(state.volume as usize / 34).clamp(0, 2)],
         };
         Paragraph::new(format!("{} {}", icon, state.volume))
             .alignment(self.alignment)
