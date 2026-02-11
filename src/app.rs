@@ -96,7 +96,7 @@ impl App {
             Action::UpdateHyprlandState(hyprland_event) => match hyprland_event {
                 HyprlandEvent::WorkspaceChanged(workspace_event_data) => {
                     let mut i = 0;
-                    for workspace in self.hyprland_state.workspaces.clone() {
+                    for workspace in &self.hyprland_state.workspaces {
                         if workspace_event_data.id == workspace.0 {
                             self.hyprland_state.activeworkspaceindex = i;
                             break;
@@ -112,6 +112,9 @@ impl App {
                     {
                         Ok(pos) => {
                             self.hyprland_state.workspaces.remove(pos);
+                            if pos < self.hyprland_state.activeworkspaceindex {
+                                self.hyprland_state.activeworkspaceindex -= 1;
+                            }
                         }
                         Err(_pos) => {}
                     }
